@@ -1,65 +1,52 @@
-use crate::compares::compares_excel;
-use calamine::open_workbook_auto;
-use calamine::Reader;
-use errors::DpdError;
-use errors::DpdResult;
-use std::ops::Not;
-use std::path::PathBuf;
-
-mod compares;
-mod errors;
+use dpdcmpexcel::errors::DpdResult;
+mod dpdcmpexcel;
+mod gui;
 
 fn main() -> DpdResult<()> {
-    // converts first argument into a csv (same name, silently overrides
-    // if the file already exists
+    let (source, target, isgui) = getargs();
+    if !isgui {
+        run_without_ui(source.unwrap(), target.unwrap())?;
+    } else {
+        run_with_ui()?;
+    }
+    Ok(())
+}
 
-    let (file1, file2, isgui) = match (std::env::args().nth(1), std::env::args().nth(2)) {
+fn getargs() -> (Option<String>, Option<String>, bool) {
+    match (std::env::args().nth(1), std::env::args().nth(2)) {
         (Some(o), Some(b)) => (Some(o), Some(b), false),
         (Some(_), None) => (None, None, true),
         (None, Some(_)) => (None, None, true),
         (None, None) => (None, None, true),
-    };
-    if isgui.not() {
-        let sce1 = PathBuf::from(file1.unwrap());
-        let sce2 = PathBuf::from(file2.unwrap());
-        match (
-            sce1.extension().and_then(|s| s.to_str()),
-            sce2.extension().and_then(|s| s.to_str()),
-        ) {
-            (Some("xlsx"), Some("xlsx"))
-            | (Some("xlsm"), Some("xlsm"))
-            | (Some("xlsb"), Some("xlsb"))
-            | (Some("xls"), Some("xls")) => (),
-            _ => return Err(DpdError::Validation("Expecting an excel file".to_owned())),
-        }
+    }
+}
 
-        let mut xl1 = open_workbook_auto(&sce1).unwrap();
-        let mut xl2 = open_workbook_auto(&sce2).unwrap();
-        for (sheet, data) in xl1.worksheets().into_iter() {
-            match xl2.worksheet_range(&sheet) {
-                Some(d) => match d {
-                    Ok(dt) => {
-                        let dd = compares_excel(
-                            data,
-                            dt,
-                            sce1.as_path().file_name().unwrap().to_str().unwrap(),
-                            sce2.as_path().file_name().unwrap().to_str().unwrap(),
-                            &sheet);
-                        for data in dd.unwrap() {
-                            println!("{data}");
-                        }
-                        } ,
-                    Err(e) => {
-                        eprintln!("error on parsing data in sheets {}: {}", sheet, e);
-                        continue;
-                    }
-                },
-                None => {
-                    eprintln!("sheet {} is not exists on file {:?}", sheet, &sce2);
-                    continue;
-                }
-            };
-        };
-    };
+fn run_without_ui(source: String, target: String) -> DpdResult<()> {
+    todo!("todo! run_without_ui implementation {}{}", source, target)
+}
+
+fn run_with_ui() -> DpdResult<()> {
+    let icon = image::load_from_memory_with_format(
+        include_bytes!("assets/logo-dispendik-piala.png"),
+        image::ImageFormat::Png,
+    )
+    .expect("Failed to load icon")
+    .to_rgba8();
+    let (icon_width, icon_height) = icon.dimensions();
+
+    eframe::run_native(
+        "DispendikCompExcel",
+        eframe::NativeOptions {
+            drag_and_drop_support: true,
+            icon_data: Some(eframe::IconData {
+                rgba: icon.into_raw(),
+                width: icon_width,
+                height: icon_height,
+            }),
+            default_theme: eframe::Theme::Dark,
+            ..Default::default()
+        },
+        Box::new(|_| Box::new(gui::Application::default())),
+    );
     Ok(())
 }
