@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::Div, path::PathBuf};
+use std::{fmt::Display, ops::Div, path::PathBuf, thread};
 
 use eframe::egui::*;
 
@@ -9,6 +9,11 @@ use crate::{
 
 use super::{UnWrapGui, View};
 
+const HOME: &'static str = env!("HOME");
+
+#[cfg(windows)]
+const HOME: &'static str = env!("USERPROFILE");
+
 pub(super) struct InputTabel {
     pub(super) data: Option<CmpData>,
     pub(super) selected_idx: usize,
@@ -17,7 +22,16 @@ pub(super) struct InputTabel {
 }
 impl InputTabel {
     pub fn open_path(&mut self) {
-        if let Some(path) = rfd::FileDialog::new().pick_file() {
+        if let Some(path) = thread::spawn(move || {
+            rfd::FileDialog::new()
+                .add_filter("ExcelFile", &["xlsx", "xlsb", "xlsm", "xls"])
+                .set_title("Pilih Excel File Yang Akan Dibuka")
+                .set_directory(HOME)
+                .pick_file()
+        })
+        .join()
+        .unwrap_or(None)
+        {
             self.set_data(CmpData::new(&path).unwrap_gui());
         }
     }
@@ -56,7 +70,7 @@ impl InputTabel {
         self.data = None;
     }
 
-    fn hovered_inactive(&self) -> bool {
+    pub fn hovered_inactive(&self) -> bool {
         if self.data.is_none() || self.data.as_ref().unwrap().sheets.is_empty() {
             true
         } else {
@@ -77,7 +91,15 @@ impl Default for InputTabel {
 
 impl View for InputTabel {
     fn ui(&mut self, ui: &mut eframe::egui::Ui) {
-        if self.hovered_inactive() {
+        if self.hovered_inactive() || !ui.ctx().input().raw.hovered_files.is_empty() {
+            if !ui.ctx().input().raw.dropped_files.is_empty() {
+                if let Some(path) = ui.ctx().input().raw.dropped_files.clone().first() {
+                    self.set_data(
+                        CmpData::new(&path.path.as_ref().unwrap_or(&PathBuf::default()))
+                            .unwrap_gui(),
+                    );
+                }
+            }
             if !ui.ui_contains_pointer() {
                 return;
             } else {
@@ -103,20 +125,22 @@ impl View for InputTabel {
             }
         } else {
             ui.horizontal(|ui| {
+                let data: &CmpData = self.data.as_ref().unwrap();
                 if ui.button("Tutup file").clicked() {
                     return self.clear();
                 }
-                ui.label(format!("{}", self.data.as_ref().unwrap().file));
-                ui.separator();
-                let sheets: &Vec<String> = self.data.as_ref().unwrap().sheets.as_ref();
-                let tmp_idx = self.selected_idx.clone();
-                ComboBox::from_label("sheetexcel").show_index(
-                    ui,
-                    &mut self.selected_idx,
-                    sheets.len(),
-                    |i| sheets[i].to_owned(),
+                ui.colored_label(
+                    Color32::BLUE,
+                    RichText::new(format!("{}", &data.file)).monospace(),
                 );
-                if tmp_idx != self.selected_idx {
+                ui.separator();
+                let sheets: &Vec<String> = data.sheets.as_ref();
+                if ComboBox::from_label("sheetexcel")
+                    .show_index(ui, &mut self.selected_idx, sheets.len(), |i| {
+                        sheets[i].to_owned()
+                    })
+                    .changed()
+                {
                     self.refresh();
                 }
             });

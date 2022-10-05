@@ -2,6 +2,8 @@ pub mod inputtabel;
 pub mod mainwindow;
 pub mod outputtabel;
 
+use std::path::PathBuf;
+
 use crate::dpdcmpexcel::{compares::CmpData, errors::DpdResult};
 
 use self::mainwindow::CenterWindow;
@@ -142,3 +144,4 @@ unwrap_gui_impl!(CmpData);
 unwrap_gui_impl!((Vec<Vec<String>>, (usize, usize)));
 unwrap_gui_impl!(Vec<Vec<String>>);
 unwrap_gui_impl!(());
+unwrap_gui_impl!(Option<PathBuf>);

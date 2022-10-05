@@ -9,24 +9,21 @@ use similar::{capture_diff_slices, Algorithm, ChangeTag};
 use std::path::Path;
 
 #[allow(unused)]
-pub struct Comparison(Vec<CmpRslt>);
+pub struct Comparison(pub Vec<CmpRslt>);
+
+impl Default for Comparison {
+    fn default() -> Self {
+        Self(Vec::default())
+    }
+}
 
 impl Comparison {
     #[allow(unused)]
-    #[inline]
-    pub fn default() -> Self {
-        Self(Vec::default())
-    }
-    #[allow(unused)]
-    pub fn run(
-        src: &Vec<Vec<String>>,
-        target: &Vec<Vec<String>>,
-        sheet: &str,
-    ) -> DpdResult<Self> {
+    pub fn run(&mut self, src: &Vec<Vec<String>>, target: &Vec<Vec<String>>, sheet: &str) -> DpdResult<()> {
+        self.0.clear();
         let src_cmp = src.iter().map(|x| x[1..].to_owned()).collect::<Vec<_>>();
         let target_cmp = target.iter().map(|x| x[1..].to_owned()).collect::<Vec<_>>();
 
-        let mut out: Vec<CmpRslt> = Vec::new();
         for (idx, op) in capture_diff_slices(Algorithm::Myers, &src_cmp, &target_cmp)
             .into_iter()
             .enumerate()
@@ -40,7 +37,7 @@ impl Comparison {
                     ChangeTag::Equal => (String::default(), Style::new().dim(), false),
                 };
                 if show {
-                    out.push(CmpRslt {
+                    self.0.push(CmpRslt {
                         oldindex: old,
                         newindex: new,
                         sheet: sheet.to_owned(),
@@ -51,7 +48,7 @@ impl Comparison {
                 }
             })
         }
-        Ok(Self(out))
+        Ok(())
     }
 }
 

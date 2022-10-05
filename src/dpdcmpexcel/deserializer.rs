@@ -56,9 +56,10 @@ pub(crate) fn deserialize_data_excel(
     (out, size)
 }
 
+#[inline]
 pub fn validate<P: AsRef<Path>>(f: P) -> DpdResult<()> {
     match f.as_ref().extension().and_then(|s| s.to_str()) {
-        Some("xlsx") | Some("xlsm") | Some("xlsb") | Some("xls") => Ok(()),
+        Some("xlsx") | Some("xlsm") | Some("xlsb") | Some("xls") | Some("csv") => Ok(()),
         _ => Err(DpdError::Validation("Expecting an excel file".to_owned())),
     }
 }
