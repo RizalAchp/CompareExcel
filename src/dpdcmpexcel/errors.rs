@@ -1,5 +1,3 @@
-use std::any::Any;
-
 #[derive(Debug, thiserror::Error)]
 pub enum DpdError {
     #[error("IO error")]
@@ -16,8 +14,9 @@ pub enum DpdError {
     #[error("Processing error: {0}")]
     Processing(String),
 
-    #[error("Join Thread error")]
-    Boxed(Box<dyn Any + Send + 'static>)
+    #[allow(unused)]
+    #[error("Unkown Error")]
+    Unknown,
 }
 
 pub type DpdResult<T> = Result<T, DpdError>;

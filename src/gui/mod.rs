@@ -2,9 +2,7 @@ pub mod inputtabel;
 pub mod mainwindow;
 pub mod outputtabel;
 
-use std::path::PathBuf;
-
-use crate::dpdcmpexcel::{compares::CmpData, errors::DpdResult};
+use crate::dpdcmpexcel::errors::DpdResult;
 
 use self::mainwindow::CenterWindow;
 
@@ -21,15 +19,31 @@ pub trait TableData {
 }
 
 #[allow(unused)]
-#[derive(Default)]
+#[derive(Debug)]
 pub(crate) struct Application {
     pub(super) center_window: CenterWindow,
     pub(super) allowed_to_close: bool,
     pub(super) show_confirmation_dialog: bool,
     pub(super) show_error_message: bool,
+    pub(super) show_help_message: bool,
+}
+
+impl Default for Application {
+    fn default() -> Self {
+        Self {
+            center_window: CenterWindow::default(),
+            allowed_to_close: false,
+            show_confirmation_dialog: false,
+            show_error_message: false,
+            show_help_message: false,
+        }
+    }
 }
 
 impl Application {
+    #[allow(unused)]
+    pub(crate) fn help_window(&mut self, ui: &mut eframe::egui::Ui, frame: &mut eframe::Frame) {}
+
     #[allow(unused)]
     pub(crate) fn bar_contents(&mut self, ui: &mut eframe::egui::Ui, frame: &mut eframe::Frame) {
         eframe::egui::widgets::global_dark_light_mode_switch(ui);
@@ -37,11 +51,13 @@ impl Application {
         ui.with_layout(
             eframe::egui::Layout::left_to_right(eframe::egui::Align::LEFT),
             |ui| {
-                if ui.button("Clear All").clicked() {
+                ui.heading("CompareExcel");
+                ui.separator();
+                if ui.button("Clear").clicked() {
                     self.center_window.close_current();
                 };
                 ui.separator();
-                if ui.button("Swap Input").clicked() {
+                if ui.button("Swap").clicked() {
                     std::mem::swap(
                         &mut self.center_window.input_target,
                         &mut self.center_window.input_source,
@@ -54,6 +70,10 @@ impl Application {
         ui.with_layout(
             eframe::egui::Layout::right_to_left(eframe::egui::Align::RIGHT),
             |ui| {
+                if ui.button("help").clicked() {
+                    self.show_help_message = !self.show_help_message;
+                }
+                ui.separator();
                 eframe::egui::warn_if_debug_build(ui);
             },
         );
@@ -67,9 +87,7 @@ impl eframe::App for Application {
 
     fn update(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
         eframe::egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
-            eframe::egui::trace!(ui);
             ui.horizontal_wrapped(|ui| {
-                ui.visuals_mut().button_frame = false;
                 self.bar_contents(ui, frame);
             });
         });
@@ -114,34 +132,22 @@ impl eframe::App for Application {
 }
 
 trait UnWrapGui<T> {
-    fn unwrap_gui(self) -> Option<T>;
+    fn unwrap_gui(self) -> T;
 }
 
-#[macro_export]
-macro_rules! unwrap_gui_impl {
-    ($t:ty) => {
-        impl UnWrapGui<$t> for DpdResult<$t> {
-            #[inline]
-            fn unwrap_gui(self) -> Option<$t> {
-                match self {
-                    Ok(k) => Some(k),
-                    Err(e) => {
-                        rfd::MessageDialog::new()
-                            .set_level(rfd::MessageLevel::Error)
-                            .set_title("Got Error!")
-                            .set_buttons(rfd::MessageButtons::Ok)
-                            .set_description(&e.to_string())
-                            .show();
-                        None
-                    }
-                }
+impl<T: Default + ?Sized> UnWrapGui<T> for DpdResult<T> {
+    fn unwrap_gui(self) -> T {
+        match self {
+            Ok(k) => k,
+            Err(e) => {
+                rfd::MessageDialog::new()
+                    .set_level(rfd::MessageLevel::Error)
+                    .set_title("Got Error!")
+                    .set_buttons(rfd::MessageButtons::Ok)
+                    .set_description(&e.to_string())
+                    .show();
+                Default::default()
             }
         }
-    };
+    }
 }
-
-unwrap_gui_impl!(CmpData);
-unwrap_gui_impl!((Vec<Vec<String>>, (usize, usize)));
-unwrap_gui_impl!(Vec<Vec<String>>);
-unwrap_gui_impl!(());
-unwrap_gui_impl!(Option<PathBuf>);

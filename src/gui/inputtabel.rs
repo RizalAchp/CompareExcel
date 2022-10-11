@@ -9,16 +9,20 @@ use crate::{
 
 use super::{UnWrapGui, View};
 
+#[cfg(linux)]
 const HOME: &'static str = env!("HOME");
 
 #[cfg(windows)]
 const HOME: &'static str = env!("USERPROFILE");
 
+#[derive(Default, Debug)]
 pub(super) struct InputTabel {
-    pub(super) data: Option<CmpData>,
+    pub(super) data: CmpData,
     pub(super) selected_idx: usize,
     pub(super) selected_data: Vec<Vec<String>>,
     pub(crate) size: (usize, usize),
+    pub(crate) has_header: bool,
+    pub(crate) is_filtered: bool,
 }
 impl InputTabel {
     pub fn open_path(&mut self) {
@@ -35,57 +39,91 @@ impl InputTabel {
             self.set_data(CmpData::new(&path).unwrap_gui());
         }
     }
-    pub fn set_data(&mut self, d: Option<CmpData>) {
+    #[inline]
+    pub fn set_data(&mut self, d: CmpData) {
         self.data = d;
         self.refresh();
     }
+
+    #[inline]
     pub fn refresh(&mut self) {
-        if let Some(data) = &mut self.data {
-            let sheet_selected = match data.sheets.get(self.selected_idx) {
+        if self.data.exl.is_none() {
+            ()
+        } else {
+            self.selected_data.clear();
+            let sheet_selected = match self.data.sheets.get(self.selected_idx) {
                 Some(data) => data.to_owned(),
                 None => String::new(),
             };
-            match data.get_deserialized_data(&sheet_selected).unwrap_gui() {
-                Some(k) => {
-                    self.selected_data.clear();
-                    self.selected_data = k.0;
-                    self.size = k.1;
-                }
-                None => (),
-            }
-        };
+            (self.selected_data, self.size) = self
+                .data
+                .get_deserialized_data(&sheet_selected)
+                .unwrap_gui();
+        }
     }
 
+    #[inline]
     pub fn sort_table(&mut self, idx: usize) {
-        self.selected_data
-            .sort_by_col(idx, self.size.1)
-            .unwrap_gui();
+        self.selected_data.sort_by_col(idx).unwrap_gui();
     }
 
+    #[inline]
     pub fn clear(&mut self) {
-        if let Some(data) = &self.data {
-            drop(data);
-        }
+        drop(&mut self.data);
         self.selected_data.clear();
-        self.data = None;
     }
 
+    #[inline]
     pub fn hovered_inactive(&self) -> bool {
-        if self.data.is_none() || self.data.as_ref().unwrap().sheets.is_empty() {
-            true
-        } else {
-            false
-        }
+        self.data.exl.is_none() || self.data.sheets.is_empty()
     }
-}
-impl Default for InputTabel {
-    fn default() -> Self {
-        Self {
-            data: None,
-            selected_idx: 0,
-            selected_data: Vec::new(),
-            size: (0, 0),
-        }
+
+    #[inline]
+    pub fn draw_table(&mut self, ui: &mut Ui) {
+        ui.vertical(|ui| {
+            use egui_extras::{Size, TableBuilder};
+
+            TableBuilder::new(ui)
+                .striped(true)
+                .cell_layout(Layout::left_to_right(Align::Center))
+                .columns(Size::remainder().at_least(10.0), self.size.1)
+                .resizable(true)
+                .header(20.0, |mut header| {
+                    if !self.selected_data.is_empty() && self.has_header {
+                        let iter = self.selected_data[0].clone().into_iter();
+                        for (idx, item) in iter.enumerate() {
+                            let clicked = header
+                                .col(|ui| {
+                                    ui.heading(item);
+                                })
+                                .interact(Sense::click())
+                                .clicked();
+                            if clicked && self.is_filtered {
+                                self.sort_table(idx)
+                            }
+                        }
+                    } else {
+                        header.col(|ui| {
+                            ui.heading("No Header");
+                        });
+                    }
+                })
+                .body(|mut body| {
+                    if !self.selected_data.is_empty() {
+                        let iters = self.selected_data[1..].iter().enumerate();
+                        for (idx, item) in iters {
+                            let row_height = if thick_row(idx) { 30.0 } else { 18.0 };
+                            body.row(row_height, |mut row| {
+                                for it in item {
+                                    row.col(|ui| {
+                                        ui.label(it);
+                                    });
+                                }
+                            });
+                        }
+                    }
+                })
+        });
     }
 }
 
@@ -125,67 +163,36 @@ impl View for InputTabel {
             }
         } else {
             ui.horizontal(|ui| {
-                let data: &CmpData = self.data.as_ref().unwrap();
                 if ui.button("Tutup file").clicked() {
-                    return self.clear();
+                    self.clear();
                 }
+                ui.separator();
                 ui.colored_label(
                     Color32::BLUE,
-                    RichText::new(format!("{}", &data.file)).monospace(),
+                    RichText::new(format!("{}", &self.data.file)).monospace(),
                 );
                 ui.separator();
-                let sheets: &Vec<String> = data.sheets.as_ref();
-                if ComboBox::from_label("sheetexcel")
+                let sheets: &Vec<String> = self.data.sheets.as_ref();
+                let cmb_changed = ComboBox::from_label("sheetexcel")
                     .show_index(ui, &mut self.selected_idx, sheets.len(), |i| {
                         sheets[i].to_owned()
                     })
-                    .changed()
-                {
+                    .changed();
+                if cmb_changed {
                     self.refresh();
                 }
             });
             ui.separator();
-            ui.vertical(|ui| {
-                use egui_extras::{Size, TableBuilder};
-
-                TableBuilder::new(ui)
-                    .striped(true)
-                    .cell_layout(eframe::egui::Layout::left_to_right(
-                        eframe::egui::Align::Center,
-                    ))
-                    .columns(Size::remainder().at_least(10.0), self.size.1)
-                    .resizable(true)
-                    .header(20.0, |mut header| {
-                        if !self.selected_data.is_empty() {
-                            let iter = self.selected_data[0].clone().into_iter();
-                            for (idx, item) in iter.enumerate() {
-                                if header
-                                    .col(|ui| {
-                                        ui.heading(item);
-                                    })
-                                    .interact(Sense::click())
-                                    .clicked()
-                                {
-                                    self.sort_table(idx)
-                                }
-                            }
-                        }
-                    })
-                    .body(|mut body| {
-                        if !self.selected_data.is_empty() {
-                            for (idx, item) in self.selected_data.iter().enumerate() {
-                                let row_height = if thick_row(idx) { 30.0 } else { 18.0 };
-                                body.row(row_height, |mut row| {
-                                    for it in item {
-                                        row.col(|ui| {
-                                            ui.label(it);
-                                        });
-                                    }
-                                });
-                            }
-                        }
-                    })
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut self.has_header, "Punya Header")
+                    .on_hover_text("Check if excel has Header");
+                ui.separator();
+                if ui.button("filter row").clicked() {
+                    self.selected_data.filter_col(self.size.1).unwrap_gui();
+                }
             });
+            ui.separator();
+            self.draw_table(ui);
         }
     }
 }

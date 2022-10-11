@@ -4,8 +4,6 @@ pub mod errors;
 
 use std::{fmt, fmt::Display};
 
-use console::{style, Style};
-
 use self::errors::DpdResult;
 pub use self::{
     compares::{CmpData, Comparison},
@@ -45,49 +43,52 @@ impl Display for CmpRslt {
         write!(
             f,
             "{} | line: {} |  => {}",
-            self.style.apply_to(&self.sign).bold(),
-            style(Line(
+            self.sign,
+            Line(
                 "file".to_owned(),
                 Some(self.newindex.unwrap_or(self.oldindex.unwrap_or(0)))
-            ))
-            .dim(),
-            self.style
-                .apply_to(LimitedVec {
-                    0: self.data.to_owned()
-                })
-                .on_black()
+            ),
+            LimitedVec {
+                0: self.data.to_owned()
+            }
         )
     }
 }
 
 pub trait SortVec {
     type ReturnType;
-    fn sort_by_col(&mut self, idx_col: usize, size: usize) -> Self::ReturnType;
+    fn filter_col(&mut self, size: usize) -> Self::ReturnType;
+    fn sort_by_col(&mut self, idx_col: usize) -> Self::ReturnType;
 }
 impl SortVec for Vec<Vec<String>> {
     type ReturnType = Result<(), DpdError>;
-
-    fn sort_by_col(&mut self, idx_col: usize, size: usize) -> DpdResult<()> {
-        if idx_col >= self.len() {
-            return Err(DpdError::Processing(
-                "Error on Shorting Vector of data excel!".to_owned(),
-            ));
-        }
+    fn filter_col(&mut self, size_row: usize) -> Self::ReturnType {
         let mut temp = self
             .iter()
             .filter_map(|item| {
-                if item.len() == size {
+                if item.len() == size_row {
                     Some(item.to_owned())
                 } else {
                     None
                 }
             })
             .collect::<Vec<_>>();
-        temp.sort_by(|a, b| a[idx_col].to_lowercase().cmp(&b[idx_col].to_lowercase()));
+
         self.clear();
         self.append(&mut temp);
         Ok(())
     }
+
+    fn sort_by_col(&mut self, idx_col: usize) -> DpdResult<()> {
+        if idx_col >= self.len() {
+            return Err(DpdError::Processing(
+                "Error on Shorting Vector of data excel!".to_owned(),
+            ));
+        }
+        self.sort_by(|a, b| a[idx_col].to_lowercase().cmp(&b[idx_col].to_lowercase()));
+        Ok(())
+    }
+
     // add code here
 }
 pub trait Identic {
@@ -112,6 +113,5 @@ pub struct CmpRslt {
     pub newindex: Option<usize>,
     pub sheet: String,
     pub sign: String,
-    pub style: Style,
     pub data: Vec<String>,
 }

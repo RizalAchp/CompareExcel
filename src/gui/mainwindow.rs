@@ -10,13 +10,14 @@ pub fn thick_row(row_index: usize) -> bool {
     row_index % 6 == 0
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Default)]
 pub(super) enum ShowTable {
-    Source,
+    #[default] Source,
     Target,
     Output,
 }
 
+#[derive(Debug, Default)]
 pub(crate) struct CenterWindow {
     pub(super) output: RefCell<OutputTable>,
     pub(super) input_source: RefCell<InputTabel>,
@@ -24,18 +25,6 @@ pub(crate) struct CenterWindow {
 
     pub(super) datacompare: RefCell<Comparison>,
     pub(super) show_table: ShowTable,
-}
-
-impl Default for CenterWindow {
-    fn default() -> Self {
-        Self {
-            output: RefCell::new(Default::default()),
-            input_source: RefCell::new(Default::default()),
-            input_target: RefCell::new(Default::default()),
-            datacompare: RefCell::new(Default::default()),
-            show_table: ShowTable::Source,
-        }
-    }
 }
 
 impl CenterWindow {
@@ -56,11 +45,7 @@ impl CenterWindow {
             if uiwin.button("Start Compare").clicked() {
                 let src_data = src.selected_data.as_ref();
                 let target_data = target.selected_data.as_ref();
-                let sheets = if let Some(s) = &src.data {
-                    s.sheets[src.selected_idx].clone()
-                } else {
-                    "".to_owned()
-                };
+                let sheets = src.data.sheets[src.selected_idx].clone();
                 self.datacompare
                     .get_mut()
                     .run(src_data, target_data, &sheets)

@@ -8,15 +8,11 @@ use eframe::egui::*;
 
 use super::View;
 
+#[derive(Debug, Default)]
 pub(super) struct OutputTable {
     pub(super) data: Option<Vec<CmpRslt>>,
 }
 
-impl Default for OutputTable {
-    fn default() -> Self {
-        Self { data: None }
-    }
-}
 impl OutputTable {
     pub fn muting(&mut self, d: &Vec<CmpRslt>) {
         self.data = Some(d.to_vec())
@@ -27,15 +23,13 @@ impl OutputTable {
 }
 
 impl View for OutputTable {
-    fn ui(&mut self, ui: &mut eframe::egui::Ui) {
+    fn ui(&mut self, ui: &mut Ui) {
         ui.vertical(|ui| {
             use egui_extras::{Size, TableBuilder};
 
             let mut table = TableBuilder::new(ui)
                 .striped(true)
-                .cell_layout(eframe::egui::Layout::left_to_right(
-                    eframe::egui::Align::Center,
-                ))
+                .cell_layout(Layout::left_to_right(Align::Center))
                 .column(Size::initial(60.0).at_least(40.0))
                 .column(Size::initial(60.0).at_least(40.0))
                 .column(Size::initial(60.0).at_least(40.0))
@@ -67,7 +61,6 @@ impl View for OutputTable {
                                 "-" => Color32::LIGHT_GREEN,
                                 _ => Color32::GRAY,
                             };
-
                             body.row(row_height, |mut row| {
                                 row.col(|ui| {
                                     ui.label(
@@ -87,7 +80,7 @@ impl View for OutputTable {
                                     ui.label(format!(
                                         "{}",
                                         LimitedVec {
-                                            0: item.data.to_owned()
+                                            0: item.data.to_owned(),
                                         }
                                     ));
                                 });
