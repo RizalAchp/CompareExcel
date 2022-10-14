@@ -9,6 +9,7 @@ edition = "2021"
 calamine = "0.18.0"
 eframe = { version = "0.19.0", features = ["dark-light"] }
 egui_extras = "0.19.0"
+futures = "0.3.24"
 image = { version = "0.24.4", features = ["rgb"] }
 rfd = "0.10.0"
 similar = "2.2.0"

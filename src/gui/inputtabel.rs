@@ -1,13 +1,14 @@
-use std::{fmt::Display, ops::Div, path::PathBuf, thread};
+use std::{fmt::Display, ops::Div, path::PathBuf};
 
 use eframe::egui::*;
 
 use crate::{
     dpdcmpexcel::{compares::*, deserializer::validate, SortVec},
+    exec_async,
     gui::mainwindow::thick_row,
 };
 
-use super::{UnWrapGui, View};
+use super::{Message, UnWrapGui, View};
 
 #[cfg(linux)]
 const HOME: &'static str = env!("HOME");
@@ -15,7 +16,7 @@ const HOME: &'static str = env!("HOME");
 #[cfg(windows)]
 const HOME: &'static str = env!("USERPROFILE");
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub(super) struct InputTabel {
     pub(super) data: CmpData,
     pub(super) selected_idx: usize,
@@ -23,21 +24,41 @@ pub(super) struct InputTabel {
     pub(crate) size: (usize, usize),
     pub(crate) has_header: bool,
     pub(crate) is_filtered: bool,
+    message_channel: (
+        std::sync::mpsc::Sender<Message>,
+        std::sync::mpsc::Receiver<Message>,
+    ),
 }
+impl Default for InputTabel {
+    fn default() -> Self {
+        Self {
+            data: Default::default(),
+            selected_idx: Default::default(),
+            selected_data: Default::default(),
+            size: Default::default(),
+            has_header: Default::default(),
+            is_filtered: Default::default(),
+            message_channel: std::sync::mpsc::channel(),
+        }
+    }
+}
+
 impl InputTabel {
     pub fn open_path(&mut self) {
-        if let Some(path) = thread::spawn(move || {
-            rfd::FileDialog::new()
-                .add_filter("ExcelFile", &["xlsx", "xlsb", "xlsm", "xls"])
-                .set_title("Pilih Excel File Yang Akan Dibuka")
-                .set_directory(HOME)
-                .pick_file()
-        })
-        .join()
-        .unwrap_or(None)
-        {
-            self.set_data(CmpData::new(&path).unwrap_gui());
-        }
+        let future = rfd::AsyncFileDialog::new()
+            .add_filter("ExcelFile", &["xlsx", "xlsb", "xlsm", "xls"])
+            .set_title("Pilih Excel File Yang Akan Dibuka")
+            .set_directory(HOME)
+            .pick_file();
+
+        let message_sender = self.message_channel.0.clone();
+        exec_async!({
+            if let Some(file) = future.await {
+                message_sender
+                    .send(Message::FileOpen(CmpData::new(file.path())))
+                    .ok();
+            }
+        });
     }
     #[inline]
     pub fn set_data(&mut self, d: CmpData) {
@@ -69,8 +90,9 @@ impl InputTabel {
 
     #[inline]
     pub fn clear(&mut self) {
-        drop(&mut self.data);
+        self.data.sheets.clear();
         self.selected_data.clear();
+        self.data.exl = None;
     }
 
     #[inline]
@@ -78,7 +100,6 @@ impl InputTabel {
         self.data.exl.is_none() || self.data.sheets.is_empty()
     }
 
-    #[inline]
     pub fn draw_table(&mut self, ui: &mut Ui) {
         ui.vertical(|ui| {
             use egui_extras::{Size, TableBuilder};
@@ -129,7 +150,17 @@ impl InputTabel {
 
 impl View for InputTabel {
     fn ui(&mut self, ui: &mut eframe::egui::Ui) {
-        if self.hovered_inactive() || !ui.ctx().input().raw.hovered_files.is_empty() {
+        loop {
+            match self.message_channel.1.try_recv() {
+                Ok(message) => match message {
+                    Message::FileOpen(file) => self.set_data(file.unwrap_gui()),
+                },
+                Err(_) => {
+                    break;
+                }
+            }
+        }
+        if self.hovered_inactive() {
             if !ui.ctx().input().raw.dropped_files.is_empty() {
                 if let Some(path) = ui.ctx().input().raw.dropped_files.clone().first() {
                     self.set_data(
@@ -162,37 +193,38 @@ impl View for InputTabel {
                 }
             }
         } else {
-            ui.horizontal(|ui| {
-                if ui.button("Tutup file").clicked() {
-                    self.clear();
-                }
+            if ui.button("Tutup file").clicked() {
+                self.clear();
+            } else {
+                ui.horizontal(|ui| {
+                    ui.separator();
+                    ui.colored_label(
+                        Color32::BLUE,
+                        RichText::new(format!("{}", &self.data.file)).monospace(),
+                    );
+                    ui.separator();
+                    let sheets: &Vec<String> = self.data.sheets.as_ref();
+                    let cmb_changed = ComboBox::from_label("sheetexcel")
+                        .show_index(ui, &mut self.selected_idx, sheets.len(), |i| {
+                            sheets[i].to_owned()
+                        })
+                        .changed();
+                    if cmb_changed {
+                        self.refresh();
+                    }
+                });
                 ui.separator();
-                ui.colored_label(
-                    Color32::BLUE,
-                    RichText::new(format!("{}", &self.data.file)).monospace(),
-                );
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.has_header, "Has Header")
+                        .on_hover_text("Check if excel has Header");
+                    ui.separator();
+                    if ui.button("filter row").clicked() {
+                        self.selected_data.filter_col(self.size.1).unwrap_gui();
+                    }
+                });
                 ui.separator();
-                let sheets: &Vec<String> = self.data.sheets.as_ref();
-                let cmb_changed = ComboBox::from_label("sheetexcel")
-                    .show_index(ui, &mut self.selected_idx, sheets.len(), |i| {
-                        sheets[i].to_owned()
-                    })
-                    .changed();
-                if cmb_changed {
-                    self.refresh();
-                }
-            });
-            ui.separator();
-            ui.horizontal(|ui| {
-                ui.checkbox(&mut self.has_header, "Punya Header")
-                    .on_hover_text("Check if excel has Header");
-                ui.separator();
-                if ui.button("filter row").clicked() {
-                    self.selected_data.filter_col(self.size.1).unwrap_gui();
-                }
-            });
-            ui.separator();
-            self.draw_table(ui);
+                self.draw_table(ui);
+            }
         }
     }
 }

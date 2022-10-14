@@ -18,41 +18,59 @@ impl Default for Comparison {
 }
 
 impl Comparison {
+    pub fn get_data(self) -> (Vec<CmpRslt>, Vec<CmpRslt>) {
+        let src = self.0.iter()
+            .filter_map(|item| if item.issrc { Some(item.to_owned()) } else { None })
+            .collect::<Vec<_>>();
+        let tgt = self.0.iter()
+            .filter_map(|item| if !item.issrc { Some(item.to_owned()) } else { None })
+            .collect::<Vec<_>>();
+        (src, tgt)
+    }
     #[allow(unused)]
     pub fn run(
-        &mut self,
+        algortm: Algorithm,
         src: &Vec<Vec<String>>,
         target: &Vec<Vec<String>>,
         sheet: &str,
-    ) -> DpdResult<()> {
-        self.0.clear();
-        let src_cmp = src.iter().map(|x| x[1..].to_owned()).collect::<Vec<_>>();
-        let target_cmp = target.iter().map(|x| x[1..].to_owned()).collect::<Vec<_>>();
+        src_file: &str,
+        target_file: &str,
+    ) -> DpdResult<Self> {
+        let mut out = vec![];
+        let old_data = src.into_iter().map(|x| &x[1..]).collect::<Vec<_>>();
+        let new_data = target.into_iter().map(|x| &x[1..]).collect::<Vec<_>>();
 
-        for (idx, op) in capture_diff_slices(Algorithm::Myers, &src_cmp, &target_cmp)
+        for (idx, op) in capture_diff_slices(algortm, &old_data, &new_data)
             .into_iter()
             .enumerate()
         {
-            op.iter_changes(&src_cmp, &target_cmp).for_each(|change| {
-                let data = change.value().to_owned();
+            for change in op.iter_changes(&old_data, &new_data) {
                 let (old, new) = (change.old_index(), change.new_index());
+                let (file, issrc) = if old.is_some() {
+                    (src_file, true)
+                } else {
+                    (target_file, false)
+                };
+                let data = change.value();
                 let (sign, show) = match change.tag() {
-                    ChangeTag::Delete => ("-".to_owned(), true),
-                    ChangeTag::Insert => ("+".to_owned(), true),
-                    ChangeTag::Equal => (String::default(), false),
+                    ChangeTag::Delete => ("-", true),
+                    ChangeTag::Insert => ("+", true),
+                    ChangeTag::Equal => ("", false),
                 };
                 if show {
-                    self.0.push(CmpRslt {
+                    out.push(CmpRslt {
+                        issrc,
                         oldindex: old,
                         newindex: new,
+                        file: file.to_owned(),
                         sheet: sheet.to_owned(),
-                        sign,
-                        data,
+                        sign: sign.to_owned(),
+                        data: data.to_owned(),
                     });
                 }
-            })
+            }
         }
-        Ok(())
+        Ok(Self(out))
     }
 }
 

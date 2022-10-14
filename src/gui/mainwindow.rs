@@ -1,5 +1,7 @@
 use std::cell::RefCell;
 
+use eframe::egui::ComboBox;
+
 use crate::dpdcmpexcel::compares::Comparison;
 
 use super::inputtabel::InputTabel;
@@ -12,7 +14,8 @@ pub fn thick_row(row_index: usize) -> bool {
 
 #[derive(Debug, PartialEq, Eq, Default)]
 pub(super) enum ShowTable {
-    #[default] Source,
+    #[default]
+    Source,
     Target,
     Output,
 }
@@ -22,8 +25,7 @@ pub(crate) struct CenterWindow {
     pub(super) output: RefCell<OutputTable>,
     pub(super) input_source: RefCell<InputTabel>,
     pub(super) input_target: RefCell<InputTabel>,
-
-    pub(super) datacompare: RefCell<Comparison>,
+    pub(super) algoritma: similar::Algorithm,
     pub(super) show_table: ShowTable,
 }
 
@@ -38,31 +40,46 @@ impl CenterWindow {
             ShowTable::Output => self.output.get_mut().ui(ui),
         });
     }
-    fn side_bar(&mut self, uiwin: &mut eframe::egui::Ui) {
+    pub fn compare(&mut self) {
         let src = self.input_source.borrow();
         let target = self.input_target.borrow();
-        if !src.hovered_inactive() && !target.hovered_inactive() {
-            if uiwin.button("Start Compare").clicked() {
-                let src_data = src.selected_data.as_ref();
-                let target_data = target.selected_data.as_ref();
-                let sheets = src.data.sheets[src.selected_idx].clone();
-                self.datacompare
-                    .get_mut()
-                    .run(src_data, target_data, &sheets)
-                    .unwrap_gui();
-                self.output.get_mut().data = Some(self.datacompare.take().0);
-                self.show_table = ShowTable::Output;
-            }
-        }
+        let (_src, _tgt) = Comparison::run(
+            self.algoritma,
+            src.selected_data.as_ref(),
+            target.selected_data.as_ref(),
+            &src.data.sheets[src.selected_idx].clone(),
+            &src.data.file,
+            &target.data.file,
+        )
+        .unwrap_gui()
+        .get_data();
+
+        let output = self.output.get_mut();
+        output.set_src(_src);
+        output.set_tgt(_tgt);
+        self.show_table = ShowTable::Output;
+    }
+    fn side_bar(&mut self, uiwin: &mut eframe::egui::Ui) {
         uiwin.group(|ui| {
-            ui.radio_value(&mut self.show_table, ShowTable::Source, "Sumber");
-            ui.radio_value(&mut self.show_table, ShowTable::Target, "Target");
-            ui.radio_value(&mut self.show_table, ShowTable::Output, "Perbedaan");
+            use ShowTable::{Output, Source, Target};
+            ui.radio_value(&mut self.show_table, Source, "EXCEL SUMBER");
+            ui.radio_value(&mut self.show_table, Target, "EXCEL TARGET");
+            ui.radio_value(&mut self.show_table, Output, "PERBEDAAN");
         });
+        uiwin.separator();
+        ComboBox::from_label("Algoritma").show_ui(uiwin, |ui| {
+            use similar::Algorithm::{Lcs, Myers, Patience};
+            ui.radio_value(&mut self.algoritma, Myers, "Myers");
+            ui.radio_value(&mut self.algoritma, Patience, "Patience");
+            ui.radio_value(&mut self.algoritma, Lcs, "Lcs");
+        });
+        uiwin.separator();
+        if uiwin.button("Start Compare").clicked() {
+            self.compare()
+        }
     }
 
     pub fn close_current(&mut self) {
-        self.datacompare.get_mut().0.clear();
         self.output.get_mut().clear();
         self.input_source.get_mut().clear();
         self.input_target.get_mut().clear();

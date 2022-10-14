@@ -6,6 +6,15 @@ use crate::dpdcmpexcel::errors::DpdResult;
 
 use self::mainwindow::CenterWindow;
 
+#[macro_export]
+macro_rules! exec_async {
+    ($f:tt) => {
+        std::thread::spawn(move || {
+            futures::executor::block_on(async move $f);
+        });
+    };
+}
+
 pub trait Window {
     fn name(&self) -> &'static str;
     fn show(&mut self, ctx: &eframe::egui::Context, open: &mut bool);
@@ -86,6 +95,7 @@ impl eframe::App for Application {
     }
 
     fn update(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
+        ctx.request_repaint_after(std::time::Duration::from_secs_f32(1.0f32));
         eframe::egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
                 self.bar_contents(ui, frame);
@@ -112,17 +122,16 @@ impl eframe::App for Application {
                 .resizable(false)
                 .show(ctx, |ui| {
                     ui.horizontal(|ui| {
-                        if ui.button("Hoyeahh!").clicked() {
+                        if ui.button("Yes").clicked() {
                             self.allowed_to_close = true;
                             frame.close();
                         }
-                        if ui.button("Tidak Jadi").clicked() {
+                        if ui.button("No").clicked() {
                             self.show_confirmation_dialog = false;
                         }
                     });
                 });
         }
-        ctx.request_repaint_after(std::time::Duration::from_secs_f32(1.0f32));
     }
 
     fn on_close_event(&mut self) -> bool {
@@ -131,6 +140,10 @@ impl eframe::App for Application {
     }
 }
 
+pub enum Message {
+    FileOpen(DpdResult<crate::dpdcmpexcel::CmpData>),
+    // Other messages
+}
 trait UnWrapGui<T> {
     fn unwrap_gui(self) -> T;
 }
@@ -140,12 +153,15 @@ impl<T: Default + ?Sized> UnWrapGui<T> for DpdResult<T> {
         match self {
             Ok(k) => k,
             Err(e) => {
-                rfd::MessageDialog::new()
-                    .set_level(rfd::MessageLevel::Error)
-                    .set_title("Got Error!")
-                    .set_buttons(rfd::MessageButtons::Ok)
-                    .set_description(&e.to_string())
-                    .show();
+                exec_async!({
+                    rfd::MessageDialog::new()
+                        .set_level(rfd::MessageLevel::Error)
+                        .set_title("Got Error!")
+                        .set_buttons(rfd::MessageButtons::Ok)
+                        .set_description(&e.to_string())
+                        .show()
+                });
+
                 Default::default()
             }
         }

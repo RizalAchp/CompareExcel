@@ -109,8 +109,10 @@ impl Identic for Vec<String> {
 #[allow(unused)]
 #[derive(Debug, Clone, Default)]
 pub struct CmpRslt {
+    pub issrc: bool,
     pub oldindex: Option<usize>,
     pub newindex: Option<usize>,
+    pub file: String,
     pub sheet: String,
     pub sign: String,
     pub data: Vec<String>,

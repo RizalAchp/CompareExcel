@@ -1,8 +1,7 @@
-use dpdcmpexcel::errors::DpdResult;
 mod dpdcmpexcel;
 mod gui;
 
-fn main() -> DpdResult<()> {
+fn main() -> dpdcmpexcel::errors::DpdResult<()> {
     let (source, target, isgui) = getargs();
     if !isgui {
         run_without_ui(source.unwrap(), target.unwrap())?;
@@ -21,11 +20,11 @@ fn getargs() -> (Option<String>, Option<String>, bool) {
     }
 }
 
-fn run_without_ui(source: String, target: String) -> DpdResult<()> {
-    todo!("todo! run_without_ui implementation {}{}", source, target)
+fn run_without_ui(source: String, target: String) -> dpdcmpexcel::errors::DpdResult<()> {
+    Err(dpdcmpexcel::errors::DpdError::Processing(format!("todo! run_without_ui implementation {}{}", source, target)))
 }
 
-fn run_with_ui() -> DpdResult<()> {
+fn run_with_ui() -> dpdcmpexcel::errors::DpdResult<()> {
     let icon = image::load_from_memory_with_format(
         include_bytes!("assets/logo-dispendik-piala.png"),
         image::ImageFormat::Png,
