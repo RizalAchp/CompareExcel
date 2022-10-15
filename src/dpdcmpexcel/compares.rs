@@ -1,6 +1,7 @@
 use super::{
     deserializer::{deserialize_data_excel, validate},
     errors::{DpdError, DpdResult},
+    SortVec,
 };
 use crate::dpdcmpexcel::CmpRslt;
 use calamine::{open_workbook_auto, Reader, Sheets};
@@ -19,11 +20,27 @@ impl Default for Comparison {
 
 impl Comparison {
     pub fn get_data(self) -> (Vec<CmpRslt>, Vec<CmpRslt>) {
-        let src = self.0.iter()
-            .filter_map(|item| if item.issrc { Some(item.to_owned()) } else { None })
+        let src = self
+            .0
+            .iter()
+            .filter_map(|item| {
+                if item.issrc {
+                    Some(item.to_owned())
+                } else {
+                    None
+                }
+            })
             .collect::<Vec<_>>();
-        let tgt = self.0.iter()
-            .filter_map(|item| if !item.issrc { Some(item.to_owned()) } else { None })
+        let tgt = self
+            .0
+            .iter()
+            .filter_map(|item| {
+                if !item.issrc {
+                    Some(item.to_owned())
+                } else {
+                    None
+                }
+            })
             .collect::<Vec<_>>();
         (src, tgt)
     }
@@ -74,59 +91,83 @@ impl Comparison {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct SizeTable {
+    pub h: usize,
+    pub w: usize,
+}
+
+impl From<(usize, usize)> for SizeTable {
+    #[inline]
+    fn from(d: (usize, usize)) -> Self {
+        Self { h: d.0, w: d.1 }
+    }
+}
+
+#[derive(Default)]
 pub struct CmpData {
     pub file: String,
     pub exl: Option<Sheets>,
     pub sheets: Vec<String>,
+    pub selected_data: Vec<Vec<String>>,
+    pub size: SizeTable,
+    pub has_header: bool,
+    pub is_filtered: bool,
 }
 impl std::fmt::Debug for CmpData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CmpData (file: {:?}, ", self.file)?;
-        if self.exl.is_some() {
-            write!(f, "exl: Sheets, ")
-        } else {
-            write!(f, "exl: None, ")
-        }?;
-        write!(f, "sheets: {:?})", self.sheets)
-    }
-}
-
-impl Default for CmpData {
-    fn default() -> Self {
-        Self {
-            file: Default::default(),
-            exl: None,
-            sheets: Default::default(),
-        }
+        f.debug_struct("CmpData")
+            .field("file", &self.file)
+            .field("exl", &"Option<Sheets>")
+            .field("sheets", &self.sheets)
+            .field("selected_data", &self.selected_data)
+            .field("size", &self.size)
+            .field("has_header", &self.has_header)
+            .field("is_filtered", &self.is_filtered)
+            .finish()
     }
 }
 
 impl CmpData {
     pub fn new<P: AsRef<Path>>(f: P) -> DpdResult<Self> {
-        validate(f.as_ref())?;
-        let file = match f.as_ref().to_str() {
-            Some(p) => p.to_owned(),
-            None => String::new(),
-        };
-        match open_workbook_auto(f.as_ref()) {
-            Ok(exl) => {
-                let sheets = exl.sheet_names().to_owned();
+        match validate(f.as_ref())? {
+            super::deserializer::TypeTable::Excel(s) => match open_workbook_auto(&s) {
+                Ok(exl) => {
+                    let sheets = exl.sheet_names().to_owned();
+                    Ok(Self {
+                        file: s,
+                        exl: Some(exl),
+                        sheets,
+                        ..Default::default()
+                    })
+                }
+                Err(e) => Err(DpdError::Validation(format!(
+                    "Error saat mencoba Membuka File `{}` | `{}`",
+                    s, e
+                ))),
+            },
+            super::deserializer::TypeTable::Csv(s) => {
+                let mut reader = csv::Reader::from_path(&s)?;
+                let data: Vec<Vec<String>> = reader.deserialize().filter_map(|f| f.ok()).collect();
+                let size = SizeTable {
+                    h: data.len(),
+                    w: data
+                        .iter()
+                        .map(|item| item.len())
+                        .max()
+                        .unwrap_or(data[0].len()),
+                };
                 Ok(Self {
-                    file,
-                    exl: Some(exl),
-                    sheets,
+                    file: s,
+                    selected_data: data,
+                    has_header: reader.has_headers(),
+                    size,
+                    ..Default::default()
                 })
             }
-            Err(e) => Err(DpdError::Validation(format!(
-                "Error saat mencoba Membuka File `{}` | `{}`",
-                file, e
-            ))),
         }
     }
-    pub(crate) fn get_deserialized_data(
-        &mut self,
-        sheet: &str,
-    ) -> DpdResult<(Vec<Vec<String>>, (usize, usize))> {
+    pub(crate) fn set_selected_data(&mut self, sheet: &str) -> DpdResult<()> {
         if let Some(exl) = &mut self.exl {
             let data = match exl.worksheet_range(sheet) {
                 Some(ws) => Ok(ws?),
@@ -136,11 +177,32 @@ impl CmpData {
                 ))),
             }?;
 
-            Ok(deserialize_data_excel(&data))
+            self.selected_data = deserialize_data_excel(&data);
+            self.size = data.get_size().into();
+            Ok(())
         } else {
-            return Err(DpdError::Validation(
-                "There is no Excel file Loaded on the application".to_owned(),
-            ));
+            Ok(())
         }
+    }
+
+    #[inline]
+    pub fn filter(&mut self, row: Option<usize>) -> DpdResult<()> {
+        if let Some(r) = row {
+            self.selected_data.filter_col(r)
+        } else {
+            self.selected_data.filter_col(self.size.w)
+        }
+    }
+    
+    #[inline]
+    pub fn close(&mut self) {
+       self.file.clear();
+       self.exl = None;
+       self.sheets.clear();
+       self.selected_data.clear();
+       self.size = SizeTable::default();
+       self.has_header = false;
+       self.is_filtered = false;
+       
     }
 }

@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use eframe::egui::ComboBox;
 
 use crate::dpdcmpexcel::compares::Comparison;
+use crate::dpdcmpexcel::DpdError;
 
 use super::inputtabel::InputTabel;
 use super::outputtabel::OutputTable;
@@ -25,7 +26,7 @@ pub(crate) struct CenterWindow {
     pub(super) output: RefCell<OutputTable>,
     pub(super) input_source: RefCell<InputTabel>,
     pub(super) input_target: RefCell<InputTabel>,
-    pub(super) algoritma: similar::Algorithm,
+    pub(super) algoritma: usize,
     pub(super) show_table: ShowTable,
 }
 
@@ -43,21 +44,32 @@ impl CenterWindow {
     pub fn compare(&mut self) {
         let src = self.input_source.borrow();
         let target = self.input_target.borrow();
-        let (_src, _tgt) = Comparison::run(
-            self.algoritma,
-            src.selected_data.as_ref(),
-            target.selected_data.as_ref(),
-            &src.data.sheets[src.selected_idx].clone(),
-            &src.data.file,
-            &target.data.file,
-        )
-        .unwrap_gui()
-        .get_data();
+        if !src.hovered_inactive() && !target.hovered_inactive() {
+            let (_src, _tgt) = Comparison::run(
+                match self.algoritma {
+                    0 => similar::Algorithm::Myers,
+                    1 => similar::Algorithm::Patience,
+                    2 => similar::Algorithm::Lcs,
+                    _ => Err(DpdError::Processing(
+                        "Indexing on Algoritm Chosen".to_owned(),
+                    ))
+                    .unwrap_gui(),
+                },
+                src.data.selected_data.as_ref(),
+                target.data.selected_data.as_ref(),
+                &src.data.sheets[src.selected_idx].clone(),
+                &src.data.file,
+                &target.data.file,
+            )
+            .unwrap_gui()
+            .get_data();
 
-        let output = self.output.get_mut();
-        output.set_src(_src);
-        output.set_tgt(_tgt);
-        self.show_table = ShowTable::Output;
+            let output = self.output.get_mut();
+            output.set_src(_src);
+            output.set_tgt(_tgt);
+            self.show_table = ShowTable::Output;
+        } else {
+        }
     }
     fn side_bar(&mut self, uiwin: &mut eframe::egui::Ui) {
         uiwin.group(|ui| {
@@ -67,12 +79,17 @@ impl CenterWindow {
             ui.radio_value(&mut self.show_table, Output, "PERBEDAAN");
         });
         uiwin.separator();
-        ComboBox::from_label("Algoritma").show_ui(uiwin, |ui| {
-            use similar::Algorithm::{Lcs, Myers, Patience};
-            ui.radio_value(&mut self.algoritma, Myers, "Myers");
-            ui.radio_value(&mut self.algoritma, Patience, "Patience");
-            ui.radio_value(&mut self.algoritma, Lcs, "Lcs");
-        });
+        ComboBox::from_label("Algoritma").show_index(
+            uiwin,
+            &mut self.algoritma,
+            3,
+            |idx| match idx {
+                0 => "Myers".to_owned(),
+                1 => "Patience".to_owned(),
+                2 => "Lcs".to_owned(),
+                _ => Default::default(),
+            },
+        );
         uiwin.separator();
         if uiwin.button("Start Compare").clicked() {
             self.compare()

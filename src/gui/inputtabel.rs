@@ -1,14 +1,10 @@
-use std::{fmt::Display, ops::Div, path::PathBuf};
+use std::{ops::Div, path::PathBuf};
 
 use eframe::egui::*;
 
-use crate::{
-    dpdcmpexcel::{compares::*, deserializer::validate, SortVec},
-    exec_async,
-    gui::mainwindow::thick_row,
-};
+use crate::{dpdcmpexcel::compares::*, exec_async, gui::mainwindow::thick_row};
 
-use super::{Message, UnWrapGui, View};
+use super::{DisplayGui, Message, UnWrapGui, View};
 
 #[cfg(linux)]
 const HOME: &'static str = env!("HOME");
@@ -20,10 +16,6 @@ const HOME: &'static str = env!("USERPROFILE");
 pub(super) struct InputTabel {
     pub(super) data: CmpData,
     pub(super) selected_idx: usize,
-    pub(super) selected_data: Vec<Vec<String>>,
-    pub(crate) size: (usize, usize),
-    pub(crate) has_header: bool,
-    pub(crate) is_filtered: bool,
     message_channel: (
         std::sync::mpsc::Sender<Message>,
         std::sync::mpsc::Receiver<Message>,
@@ -34,10 +26,6 @@ impl Default for InputTabel {
         Self {
             data: Default::default(),
             selected_idx: Default::default(),
-            selected_data: Default::default(),
-            size: Default::default(),
-            has_header: Default::default(),
-            is_filtered: Default::default(),
             message_channel: std::sync::mpsc::channel(),
         }
     }
@@ -71,28 +59,18 @@ impl InputTabel {
         if self.data.exl.is_none() {
             ()
         } else {
-            self.selected_data.clear();
             let sheet_selected = match self.data.sheets.get(self.selected_idx) {
                 Some(data) => data.to_owned(),
                 None => String::new(),
             };
-            (self.selected_data, self.size) = self
-                .data
-                .get_deserialized_data(&sheet_selected)
-                .unwrap_gui();
+            self.data.set_selected_data(&sheet_selected).unwrap_gui();
         }
     }
 
     #[inline]
-    pub fn sort_table(&mut self, idx: usize) {
-        self.selected_data.sort_by_col(idx).unwrap_gui();
-    }
-
-    #[inline]
     pub fn clear(&mut self) {
-        self.data.sheets.clear();
-        self.selected_data.clear();
-        self.data.exl = None;
+        self.data.close();
+        self.selected_idx = 0;
     }
 
     #[inline]
@@ -107,11 +85,11 @@ impl InputTabel {
             TableBuilder::new(ui)
                 .striped(true)
                 .cell_layout(Layout::left_to_right(Align::Center))
-                .columns(Size::remainder().at_least(10.0), self.size.1)
+                .columns(Size::remainder().at_least(10.0), self.data.size.w)
                 .resizable(true)
                 .header(20.0, |mut header| {
-                    if !self.selected_data.is_empty() && self.has_header {
-                        let iter = self.selected_data[0].clone().into_iter();
+                    if !self.data.selected_data.is_empty() && self.data.has_header {
+                        let iter = self.data.selected_data[0].clone().into_iter();
                         for (idx, item) in iter.enumerate() {
                             let clicked = header
                                 .col(|ui| {
@@ -119,8 +97,8 @@ impl InputTabel {
                                 })
                                 .interact(Sense::click())
                                 .clicked();
-                            if clicked && self.is_filtered {
-                                self.sort_table(idx)
+                            if clicked && self.data.is_filtered {
+                                self.data.filter(Some(idx)).unwrap_gui()
                             }
                         }
                     } else {
@@ -130,8 +108,8 @@ impl InputTabel {
                     }
                 })
                 .body(|mut body| {
-                    if !self.selected_data.is_empty() {
-                        let iters = self.selected_data[1..].iter().enumerate();
+                    if !self.data.selected_data.is_empty() {
+                        let iters = self.data.selected_data[1..].iter().enumerate();
                         for (idx, item) in iters {
                             let row_height = if thick_row(idx) { 30.0 } else { 18.0 };
                             body.row(row_height, |mut row| {
@@ -150,13 +128,14 @@ impl InputTabel {
 
 impl View for InputTabel {
     fn ui(&mut self, ui: &mut eframe::egui::Ui) {
-        loop {
+        {
             match self.message_channel.1.try_recv() {
                 Ok(message) => match message {
                     Message::FileOpen(file) => self.set_data(file.unwrap_gui()),
+                    _ => (),
                 },
                 Err(_) => {
-                    break;
+                    ();
                 }
             }
         }
@@ -198,10 +177,7 @@ impl View for InputTabel {
             } else {
                 ui.horizontal(|ui| {
                     ui.separator();
-                    ui.colored_label(
-                        Color32::BLUE,
-                        RichText::new(format!("{}", &self.data.file)).monospace(),
-                    );
+                    ui.colored_label(Color32::BLUE, self.data.file.display_gui_text());
                     ui.separator();
                     let sheets: &Vec<String> = self.data.sheets.as_ref();
                     let cmb_changed = ComboBox::from_label("sheetexcel")
@@ -215,33 +191,16 @@ impl View for InputTabel {
                 });
                 ui.separator();
                 ui.horizontal(|ui| {
-                    ui.checkbox(&mut self.has_header, "Has Header")
+                    ui.checkbox(&mut self.data.has_header, "Has Header")
                         .on_hover_text("Check if excel has Header");
                     ui.separator();
                     if ui.button("filter row").clicked() {
-                        self.selected_data.filter_col(self.size.1).unwrap_gui();
+                        self.data.filter(None).unwrap_gui();
                     }
                 });
                 ui.separator();
                 self.draw_table(ui);
             }
-        }
-    }
-}
-
-pub struct ThePath(pub Option<PathBuf>);
-impl Display for ThePath {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.0 {
-            Some(p) => match validate(p) {
-                Ok(_) => write!(
-                    f,
-                    "\n📃 {}",
-                    p.file_name().unwrap().to_str().unwrap_or("???")
-                ),
-                Err(_) => write!(f, "\n❎ invalid file {}", p.to_str().unwrap_or("???")),
-            },
-            None => write!(f, "\n???"),
         }
     }
 }

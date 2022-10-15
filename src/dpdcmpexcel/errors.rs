@@ -9,6 +9,9 @@ pub enum DpdError {
     #[error("Procesing excel error")]
     Excel(#[from] calamine::Error),
 
+    #[error("Processing csv error")]
+    Csv(#[from] csv::Error),
+
     #[error("Validation error: {0}")]
     Validation(String),
     #[error("Processing error: {0}")]

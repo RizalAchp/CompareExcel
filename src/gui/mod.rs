@@ -142,6 +142,8 @@ impl eframe::App for Application {
 
 pub enum Message {
     FileOpen(DpdResult<crate::dpdcmpexcel::CmpData>),
+    #[allow(unused)]
+    ReturnDialog(bool),
     // Other messages
 }
 trait UnWrapGui<T> {
@@ -164,6 +166,34 @@ impl<T: Default + ?Sized> UnWrapGui<T> for DpdResult<T> {
 
                 Default::default()
             }
+        }
+    }
+}
+
+trait DisplayGui {
+    fn display_gui_text(&self) -> eframe::egui::RichText;
+}
+impl DisplayGui for Vec<String> {
+    fn display_gui_text(&self) -> eframe::egui::RichText {
+        use std::fmt::Write;
+        let mut buf = String::new();
+        for item in self {
+            write!(buf, "{}..", item).ok();
+        }
+        buf.into()
+    }
+}
+
+impl DisplayGui for String {
+    #[inline]
+    fn display_gui_text(&self) -> eframe::egui::RichText {
+        use eframe::egui::RichText;
+        if let Some(filename) = std::path::PathBuf::from(self).file_name() {
+            RichText::from(filename.to_string_lossy())
+                .underline()
+                .color(eframe::egui::epaint::Color32::GREEN)
+        } else {
+            RichText::default()
         }
     }
 }

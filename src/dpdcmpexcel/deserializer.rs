@@ -29,11 +29,8 @@ pub(crate) fn convert_csv_to_excel(
 }
 
 #[allow(unused)]
-pub(crate) fn deserialize_data_excel(
-    range: &Range<DataType>,
-) -> (Vec<Vec<String>>, (usize, usize)) {
+pub(crate) fn deserialize_data_excel(range: &Range<DataType>) -> Vec<Vec<String>> {
     // let mut dest = String::new();
-    let size = range.get_size();
     let mut out = Vec::new();
     out.reserve(range.get_size().0);
     for r in range.rows() {
@@ -53,13 +50,22 @@ pub(crate) fn deserialize_data_excel(
             out.push(row);
         }
     }
-    (out, size)
+    out
+}
+
+pub enum TypeTable {
+    Excel(String),
+    Csv(String),
 }
 
 #[inline]
-pub fn validate<P: AsRef<Path>>(f: P) -> DpdResult<()> {
-    match f.as_ref().extension().and_then(|s| s.to_str()) {
-        Some("xlsx") | Some("xlsm") | Some("xlsb") | Some("xls") | Some("csv") => Ok(()),
+pub fn validate<P: AsRef<Path>>(f: P) -> DpdResult<TypeTable> {
+    let file = f.as_ref();
+    match file.extension().and_then(|s| s.to_str()) {
+        Some("xlsx") | Some("xlsm") | Some("xlsb") | Some("xls") => Ok(TypeTable::Excel(
+            file.to_str().unwrap_or_default().to_owned(),
+        )),
+        Some("csv") => Ok(TypeTable::Csv(file.to_str().unwrap_or_default().to_owned())),
         _ => Err(DpdError::Validation("Expecting an excel file".to_owned())),
     }
 }
