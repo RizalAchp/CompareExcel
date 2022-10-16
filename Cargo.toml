@@ -1,7 +1,15 @@
 [package]
 name = "dispendik_compare"
+authors = ["Rizal Achmad Pahlevi <https://github.com/RizalAchp>"]
 version = "0.1.0"
 edition = "2021"
+build="build.rs"
+description = "Simple Rust Application to Compare and Get Differentioal from 2 File Excel or Csv"
+repository = "https://github.com/RizalAchp/CompareExcel"
+homepage = "https://github.com/RizalAchp/CompareExcel"
+license-file = "LICENSE.rtf"
+readme = "README.md"
+categories = ["GUI", "Parsing tools", "Text processing"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -16,3 +24,7 @@ rfd = "0.10.0"
 similar = "2.2.0"
 simple_excel_writer = "0.2.0"
 thiserror = "1.0.36"
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1.12"
+winapi = {version = "*", features =["winnt"]}

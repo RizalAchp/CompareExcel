@@ -61,30 +61,27 @@ impl Comparison {
             .into_iter()
             .enumerate()
         {
+            dbg!("idx capture_diff_slices: {:?}", idx);
+            dbg!("op capture_diff_slices: {:?}", &op);
             for change in op.iter_changes(&old_data, &new_data) {
-                let (old, new) = (change.old_index(), change.new_index());
-                let (file, issrc) = if old.is_some() {
-                    (src_file, true)
-                } else {
-                    (target_file, false)
+                match change.tag() {
+                    ChangeTag::Equal => continue,
+                    ChangeTag::Delete | ChangeTag::Insert => {
+                        let (file, issrc, index) = if let Some(idx) = change.old_index() {
+                            (src_file, true, idx)
+                        } else {
+                            (target_file, false, change.new_index().unwrap_or(0))
+                        };
+                        let data = change.value();
+                        out.push(CmpRslt {
+                            issrc,
+                            index,
+                            file: file.to_owned(),
+                            sheet: sheet.to_owned(),
+                            data: data.to_owned(),
+                        });
+                    }
                 };
-                let data = change.value();
-                let (sign, show) = match change.tag() {
-                    ChangeTag::Delete => ("-", true),
-                    ChangeTag::Insert => ("+", true),
-                    ChangeTag::Equal => ("", false),
-                };
-                if show {
-                    out.push(CmpRslt {
-                        issrc,
-                        oldindex: old,
-                        newindex: new,
-                        file: file.to_owned(),
-                        sheet: sheet.to_owned(),
-                        sign: sign.to_owned(),
-                        data: data.to_owned(),
-                    });
-                }
             }
         }
         Ok(Self(out))
@@ -187,6 +184,7 @@ impl CmpData {
 
     #[inline]
     pub fn filter(&mut self, row: Option<usize>) -> DpdResult<()> {
+        self.is_filtered = true;
         if let Some(r) = row {
             self.selected_data.filter_col(r)
         } else {
@@ -195,14 +193,18 @@ impl CmpData {
     }
     
     #[inline]
+    pub fn sort(&mut self, row: Option<usize>) -> DpdResult<()> {
+        self.selected_data.sort_by_col(row.unwrap_or(self.size.w))
+    }
+
+    #[inline]
     pub fn close(&mut self) {
-       self.file.clear();
-       self.exl = None;
-       self.sheets.clear();
-       self.selected_data.clear();
-       self.size = SizeTable::default();
-       self.has_header = false;
-       self.is_filtered = false;
-       
+        self.file.clear();
+        self.exl = None;
+        self.sheets.clear();
+        self.selected_data.clear();
+        self.size = SizeTable::default();
+        self.has_header = false;
+        self.is_filtered = false;
     }
 }

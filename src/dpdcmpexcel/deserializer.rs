@@ -5,13 +5,21 @@ use calamine::{DataType, Range};
 use super::errors::{DpdError, DpdResult};
 
 #[allow(unused)]
-pub(crate) fn convert_csv_to_excel(
+pub(crate) fn convert_csv_to_excel<P>(
     csv_data: Vec<Vec<String>>,
-    excel_path: &str,
-    sheets_name: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut wb = simple_excel_writer::Workbook::create(excel_path);
-    let mut sheet = wb.create_sheet(sheets_name);
+    excel_path: P,
+    sheets_name: String,
+) -> Result<(), DpdError>
+where
+    P: AsRef<Path>,
+{
+    let mut wb = simple_excel_writer::Workbook::create(
+        excel_path
+            .as_ref()
+            .to_str()
+            .unwrap_or("output.xlsx"),
+    );
+    let mut sheet = wb.create_sheet(&sheets_name);
 
     wb.write_sheet(&mut sheet, |sw| {
         for csv in csv_data {

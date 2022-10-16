@@ -42,11 +42,10 @@ impl Display for CmpRslt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} | line: {} |  => {}",
-            self.sign,
+            "{} |  => {}",
             Line(
                 "file".to_owned(),
-                Some(self.newindex.unwrap_or(self.oldindex.unwrap_or(0)))
+                Some(self.index)
             ),
             LimitedVec {
                 0: self.data.to_owned()
@@ -61,25 +60,15 @@ pub trait SortVec {
     fn sort_by_col(&mut self, idx_col: usize) -> Self::ReturnType;
 }
 impl SortVec for Vec<Vec<String>> {
-    type ReturnType = Result<(), DpdError>;
+    type ReturnType = DpdResult<()>;
+    #[inline(always)]
     fn filter_col(&mut self, size_row: usize) -> Self::ReturnType {
-        let mut temp = self
-            .iter()
-            .filter_map(|item| {
-                if item.len() == size_row {
-                    Some(item.to_owned())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-
-        self.clear();
-        self.append(&mut temp);
+        self.retain(|f| f.len() == size_row);
         Ok(())
     }
 
-    fn sort_by_col(&mut self, idx_col: usize) -> DpdResult<()> {
+    #[inline(always)]
+    fn sort_by_col(&mut self, idx_col: usize) -> Self::ReturnType {
         if idx_col >= self.len() {
             return Err(DpdError::Processing(
                 "Error on Shorting Vector of data excel!".to_owned(),
@@ -110,10 +99,9 @@ impl Identic for Vec<String> {
 #[derive(Debug, Clone, Default)]
 pub struct CmpRslt {
     pub issrc: bool,
-    pub oldindex: Option<usize>,
-    pub newindex: Option<usize>,
+    pub index: usize,
     pub file: String,
     pub sheet: String,
-    pub sign: String,
     pub data: Vec<String>,
 }
+

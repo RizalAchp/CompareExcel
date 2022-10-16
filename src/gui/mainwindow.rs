@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 
-use eframe::egui::ComboBox;
+use eframe::egui::style::Margin;
+use eframe::egui::*;
 
 use crate::dpdcmpexcel::compares::Comparison;
 use crate::dpdcmpexcel::DpdError;
@@ -34,17 +35,20 @@ impl CenterWindow {
     pub fn ui(&mut self, ctx: &eframe::egui::Context) {
         eframe::egui::SidePanel::left("panel_config_left")
             .resizable(true)
+            .frame(Frame::none().inner_margin(Margin::symmetric(10f32, 10f32)))
             .show(ctx, |ui| self.side_bar(ui));
-        eframe::egui::CentralPanel::default().show(ctx, |ui| match self.show_table {
-            ShowTable::Source => self.input_source.get_mut().ui(ui),
-            ShowTable::Target => self.input_target.get_mut().ui(ui),
-            ShowTable::Output => self.output.get_mut().ui(ui),
-        });
+        eframe::egui::CentralPanel::default()
+            .frame(Frame::none().inner_margin(Margin::symmetric(10f32, 10f32)))
+            .show(ctx, |ui| match self.show_table {
+                ShowTable::Source => self.input_source.get_mut().ui(ui),
+                ShowTable::Target => self.input_target.get_mut().ui(ui),
+                ShowTable::Output => self.output.get_mut().ui(ui),
+            });
     }
     pub fn compare(&mut self) {
         let src = self.input_source.borrow();
         let target = self.input_target.borrow();
-        if !src.hovered_inactive() && !target.hovered_inactive() {
+        if src.is_opened() && target.is_opened() {
             let (_src, _tgt) = Comparison::run(
                 match self.algoritma {
                     0 => similar::Algorithm::Myers,
@@ -57,7 +61,7 @@ impl CenterWindow {
                 },
                 src.data.selected_data.as_ref(),
                 target.data.selected_data.as_ref(),
-                &src.data.sheets[src.selected_idx].clone(),
+                &src.data.sheets[src.idx_sheet].clone(),
                 &src.data.file,
                 &target.data.file,
             )
@@ -72,30 +76,104 @@ impl CenterWindow {
         }
     }
     fn side_bar(&mut self, uiwin: &mut eframe::egui::Ui) {
-        uiwin.group(|ui| {
-            use ShowTable::{Output, Source, Target};
-            ui.radio_value(&mut self.show_table, Source, "EXCEL SUMBER");
-            ui.radio_value(&mut self.show_table, Target, "EXCEL TARGET");
-            ui.radio_value(&mut self.show_table, Output, "PERBEDAAN");
+        uiwin.with_layout(Layout::top_down_justified(Align::Center), |ui| {
+            ui.group(|ui| {
+                use ShowTable::{Output, Source, Target};
+                ui.radio_value(
+                    &mut self.show_table,
+                    Source,
+                    RichText::new("TABEL SUMBER").strong().size(18f32),
+                );
+                ui.radio_value(
+                    &mut self.show_table,
+                    Target,
+                    RichText::new("TABEL TARGET").strong().size(18f32),
+                );
+                ui.radio_value(
+                    &mut self.show_table,
+                    Output,
+                    RichText::new("TABEL OUTPUT").strong().size(18f32),
+                );
+            });
+            ui.separator();
+            ComboBox::from_label("Algoritma").show_index(
+                ui,
+                &mut self.algoritma,
+                3,
+                |idx| match idx {
+                    0 => "Myers".to_owned(),
+                    1 => "Patience".to_owned(),
+                    2 => "Lcs".to_owned(),
+                    _ => Default::default(),
+                },
+            );
+            ui.separator();
+            ui.add_enabled_ui(self.is_ready_compare(), |ui| {
+                if ui
+                    .add(
+                        eframe::egui::Button::new(
+                            RichText::new("COMPARE INPUT")
+                                .strong()
+                                .size(18f32)
+                                .color(Color32::WHITE),
+                        )
+                        .fill(Color32::DARK_GREEN),
+                    )
+                    .on_disabled_hover_text("Open 2 input in Tab input, before you want to compare")
+                    .clicked()
+                {
+                    self.compare()
+                }
+            });
         });
         uiwin.separator();
-        ComboBox::from_label("Algoritma").show_index(
-            uiwin,
-            &mut self.algoritma,
-            3,
-            |idx| match idx {
-                0 => "Myers".to_owned(),
-                1 => "Patience".to_owned(),
-                2 => "Lcs".to_owned(),
-                _ => Default::default(),
+        self.output.borrow_mut().on_sidebar(uiwin);
+        uiwin.separator();
+        uiwin.with_layout(
+            Layout::bottom_up(Align::Center).with_cross_justify(true),
+            |ui| {
+                ui.label("© CopyRights Rizal Achmad Pahlevi");
+                ui.separator();
+                if ui
+                    .add(
+                        eframe::egui::Button::new(
+                            RichText::new("CLOSE ALL")
+                                .size(18f32)
+                                .strong()
+                                .color(Color32::WHITE),
+                        )
+                        .fill(Color32::DARK_RED),
+                    )
+                    .on_hover_text("Close All opened Table and Input")
+                    .clicked()
+                {
+                    self.close_current();
+                }
+                ui.separator();
+                if ui
+                    .add(
+                        eframe::egui::Button::new(
+                            RichText::new("SWAP INPUT")
+                                .size(18f32)
+                                .strong()
+                                .color(Color32::BLACK),
+                        )
+                        .fill(Color32::YELLOW),
+                    )
+                    .on_hover_text("Swap Source Table with Target Table")
+                    .clicked()
+                {
+                    std::mem::swap(&mut self.input_target, &mut self.input_source);
+                    self.input_source.get_mut().refresh();
+                    self.input_target.get_mut().refresh();
+                }
             },
         );
-        uiwin.separator();
-        if uiwin.button("Start Compare").clicked() {
-            self.compare()
-        }
     }
 
+    pub fn is_ready_compare(&self) -> bool {
+        self.input_source.borrow().is_opened() && self.input_target.borrow().is_opened()
+    }
     pub fn close_current(&mut self) {
         self.output.get_mut().clear();
         self.input_source.get_mut().clear();

@@ -6,6 +6,11 @@ use crate::dpdcmpexcel::errors::DpdResult;
 
 use self::mainwindow::CenterWindow;
 
+#[cfg(linux)]
+pub const HOME: &'static str = env!("HOME");
+#[cfg(windows)]
+pub const HOME: Option<&str> = option_env!("USERPROFILE");
+
 #[macro_export]
 macro_rules! exec_async {
     ($f:tt) => {
@@ -60,20 +65,6 @@ impl Application {
         ui.with_layout(
             eframe::egui::Layout::left_to_right(eframe::egui::Align::LEFT),
             |ui| {
-                ui.heading("CompareExcel");
-                ui.separator();
-                if ui.button("Clear").clicked() {
-                    self.center_window.close_current();
-                };
-                ui.separator();
-                if ui.button("Swap").clicked() {
-                    std::mem::swap(
-                        &mut self.center_window.input_target,
-                        &mut self.center_window.input_source,
-                    );
-                    self.center_window.input_source.get_mut().refresh();
-                    self.center_window.input_target.get_mut().refresh();
-                };
             },
         );
         ui.with_layout(
@@ -144,6 +135,8 @@ pub enum Message {
     FileOpen(DpdResult<crate::dpdcmpexcel::CmpData>),
     #[allow(unused)]
     ReturnDialog(bool),
+    #[allow(unused)]
+    IgnoredResult(Option<()>),
     // Other messages
 }
 trait UnWrapGui<T> {

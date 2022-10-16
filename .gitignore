@@ -1,3 +1,7 @@
 /target
 /*.xlsx
 /*.csv
+/wix
+*/wix
+
+**/*.bmp
