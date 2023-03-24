@@ -126,7 +126,7 @@ impl View for OutputTable {
     }
 }
 
-const HEADING: [&str; 4] = ["Nomor", "File", "Sheet", "Data"];
+const HEADING: [&str; 5] = ["Tag", "Nomor", "File", "Sheet", "Data"];
 
 #[inline]
 fn table_header(mut row: egui_extras::TableRow) {
@@ -142,12 +142,15 @@ fn table_body(ui: &mut Ui, items: &Vec<CmpRslt>, color: Color32) {
     egui_extras::TableBuilder::new(ui)
         .striped(true)
         .cell_layout(Layout::left_to_right(Align::Center))
-        .columns(egui_extras::Size::remainder().at_least(10.0), 4)
+        .columns(egui_extras::Size::remainder().at_least(10.0), HEADING.len())
         .resizable(true)
         .header(20.0, table_header)
         .body(|mut body| {
             for (idx, item) in items.iter().enumerate() {
                 body.row(30.0, |mut row| {
+                    row.col(|ui| {
+                        ui.colored_label(color, item.tag.display_gui_text());
+                    });
                     row.col(|ui| {
                         ui.colored_label(color, item.index.to_string());
                     });

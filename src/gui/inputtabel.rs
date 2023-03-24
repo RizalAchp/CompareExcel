@@ -111,7 +111,11 @@ impl InputTabel {
                 })
                 .body(|mut body| {
                     if !self.data.selected_data.is_empty() {
-                        let iters = self.data.selected_data[1..].iter().enumerate();
+                        let iters = if self.data.has_header {
+                            self.data.selected_data[1..].iter().enumerate()
+                        } else {
+                            self.data.selected_data.iter().enumerate()
+                        };
                         for (idx, item) in iters {
                             let row_height = if thick_row(idx) { 30.0 } else { 18.0 };
                             body.row(row_height, |mut row| {
@@ -163,8 +167,10 @@ impl View for InputTabel {
                             eframe::egui::Color32::from_black_alpha(192),
                         );
                         ui.label(
-                            eframe::egui::RichText::new("📂\nDROP OR CLICK\nTO OPEN FILE")
-                                .size(rect.height().div(10f32)),
+                            eframe::egui::RichText::new(
+                                "📂\nDROP OR CLICK\nTO OPEN FILE\nOR PASTE FROM WEB",
+                            )
+                            .size(rect.height().div(10f32)),
                         )
                     })
                     .response

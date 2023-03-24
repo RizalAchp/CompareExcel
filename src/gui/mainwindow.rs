@@ -29,6 +29,7 @@ pub(crate) struct CenterWindow {
     pub(super) input_target: RefCell<InputTabel>,
     pub(super) algoritma: usize,
     pub(super) show_table: ShowTable,
+    pub(super) ignore_num: bool,
 }
 
 impl CenterWindow {
@@ -64,6 +65,7 @@ impl CenterWindow {
                 &src.data.sheets[src.idx_sheet].clone(),
                 &src.data.file,
                 &target.data.file,
+                self.ignore_num
             )
             .unwrap_gui()
             .get_data();
@@ -109,6 +111,8 @@ impl CenterWindow {
             );
             ui.separator();
             ui.add_enabled_ui(self.is_ready_compare(), |ui| {
+                ui.checkbox(&mut self.ignore_num, "Ignore Numbering");
+                ui.separator();
                 if ui
                     .add(
                         eframe::egui::Button::new(

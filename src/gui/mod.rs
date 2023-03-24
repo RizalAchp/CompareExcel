@@ -6,9 +6,9 @@ use crate::dpdcmpexcel::errors::DpdResult;
 
 use self::mainwindow::CenterWindow;
 
-#[cfg(linux)]
-pub const HOME: &'static str = env!("HOME");
-#[cfg(windows)]
+#[cfg(target_os = "linux")]
+pub const HOME: Option<&str> = option_env!("HOME");
+#[cfg(target_os = "windows")]
 pub const HOME: Option<&str> = option_env!("USERPROFILE");
 
 #[macro_export]
@@ -86,7 +86,6 @@ impl eframe::App for Application {
     }
 
     fn update(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
-        ctx.request_repaint_after(std::time::Duration::from_secs_f32(1.0f32));
         eframe::egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
                 self.bar_contents(ui, frame);
@@ -187,6 +186,19 @@ impl DisplayGui for String {
                 .color(eframe::egui::epaint::Color32::GREEN)
         } else {
             RichText::default()
+        }
+    }
+}
+
+impl DisplayGui for similar::ChangeTag {
+    #[inline]
+    fn display_gui_text(&self) -> eframe::egui::RichText {
+        use eframe::egui::RichText;
+        use eframe::egui::epaint::Color32;
+        match *self {
+            similar::ChangeTag::Delete => RichText::from("(-)DELETED").color(Color32::RED).raised(),
+            similar::ChangeTag::Insert => RichText::from("(+)INSERTED").color(Color32::GREEN).raised(),
+            similar::ChangeTag::Equal => RichText::from("(=)EQUAL").raised()
         }
     }
 }

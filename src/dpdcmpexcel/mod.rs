@@ -43,10 +43,7 @@ impl Display for CmpRslt {
         write!(
             f,
             "{} |  => {}",
-            Line(
-                "file".to_owned(),
-                Some(self.index)
-            ),
+            Line("file".to_owned(), Some(self.index)),
             LimitedVec {
                 0: self.data.to_owned()
             }
@@ -96,12 +93,25 @@ impl Identic for Vec<String> {
 }
 
 #[allow(unused)]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct CmpRslt {
     pub issrc: bool,
+    pub tag: similar::ChangeTag,
     pub index: usize,
     pub file: String,
     pub sheet: String,
     pub data: Vec<String>,
 }
 
+impl Default for CmpRslt {
+    fn default() -> Self {
+        Self {
+            issrc: Default::default(),
+            tag: similar::ChangeTag::Delete,
+            index: Default::default(),
+            file: Default::default(),
+            sheet: Default::default(),
+            data: Default::default(),
+        }
+    }
+}

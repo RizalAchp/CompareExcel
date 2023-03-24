@@ -52,21 +52,31 @@ impl Comparison {
         sheet: &str,
         src_file: &str,
         target_file: &str,
+        ignore_num: bool,
     ) -> DpdResult<Self> {
         let mut out = vec![];
-        let old_data = src.into_iter().map(|x| &x[1..]).collect::<Vec<_>>();
-        let new_data = target.into_iter().map(|x| &x[1..]).collect::<Vec<_>>();
+        let (old_data, new_data) = if ignore_num {
+            (
+                src.into_iter()
+                    .map(|x| x[1..].to_owned())
+                    .collect::<Vec<_>>(),
+                target
+                    .into_iter()
+                    .map(|x| x[1..].to_owned())
+                    .collect::<Vec<_>>(),
+            )
+        } else {
+            (src.clone(), target.clone())
+        };
 
         for (idx, op) in capture_diff_slices(algortm, &old_data, &new_data)
             .into_iter()
             .enumerate()
         {
-            dbg!("idx capture_diff_slices: {:?}", idx);
-            dbg!("op capture_diff_slices: {:?}", &op);
             for change in op.iter_changes(&old_data, &new_data) {
                 match change.tag() {
                     ChangeTag::Equal => continue,
-                    ChangeTag::Delete | ChangeTag::Insert => {
+                    tag => {
                         let (file, issrc, index) = if let Some(idx) = change.old_index() {
                             (src_file, true, idx)
                         } else {
@@ -76,6 +86,7 @@ impl Comparison {
                         out.push(CmpRslt {
                             issrc,
                             index,
+                            tag,
                             file: file.to_owned(),
                             sheet: sheet.to_owned(),
                             data: data.to_owned(),
@@ -191,7 +202,7 @@ impl CmpData {
             self.selected_data.filter_col(self.size.w)
         }
     }
-    
+
     #[inline]
     pub fn sort(&mut self, row: Option<usize>) -> DpdResult<()> {
         self.selected_data.sort_by_col(row.unwrap_or(self.size.w))
